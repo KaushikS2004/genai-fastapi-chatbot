@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GenAI Chatbot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+    }
+    input, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+    }
+    button {
+      cursor: pointer;
+    }
+    .error {
+      color: red;
+    }
+    .success {
+      color: green;
+    }
+    #output {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ccc;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+<h2>🧑‍💻 Signup</h2>
+<input id="su-username" placeholder="Username">
+<input id="su-password" type="password" placeholder="Password">
+<button onclick="signup()">Signup</button>
+<div id="signup-msg"></div>
+
+<hr>
+
+<h2>🔐 Login</h2>
+<input id="li-username" placeholder="Username">
+<input id="li-password" type="password" placeholder="Password">
+<button onclick="login()">Login</button>
+<button onclick="logout()">Logout</button>
+<div id="login-msg"></div>
+<div id="logout-msg"></div>
+
+<hr>
+
+<h2>💬 Ask the AI</h2>
+<textarea id="prompt" rows="4" placeholder="Enter your prompt..."></textarea>
+<button onclick="generate()">Generate</button>
+
+<div id="output"></div>
+
+<script>
+  let token = "";
+
+  // ---------- SIGNUP ----------
+  async function signup() {
+    const username = document.getElementById("su-username").value.trim();
+    const password = document.getElementById("su-password").value.trim();
+    const msg = document.getElementById("signup-msg");
+
+    msg.innerText = "";
+    msg.className = "";
+
+    if (!username || !password) {
+      msg.innerText = "Username and password are required";
+      msg.className = "error";
+      return;
+    }
+
+    const res = await fetch("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      msg.innerText = data?.detail || "Signup failed";
+      msg.className = "error";
+      return;
+    }
+
+    msg.innerText = "Signup successful. You can now login.";
+    msg.className = "success";
+  }
+
+  // ---------- LOGIN ----------
+  async function login() {
+    const username = document.getElementById("li-username").value.trim();
+    const password = document.getElementById("li-password").value.trim();
+    const msg = document.getElementById("login-msg");
+    const logoutMsg = document.getElementById("logout-msg");
+
+    msg.innerText = "";
+    logoutMsg.innerText = "";
+    msg.className = "";
+    logoutMsg.className = "";
+
+    if (!username || !password) {
+      msg.innerText = "Username and password are required";
+      msg.className = "error";
+      return;
+    }
+
+    const res = await fetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      msg.innerText = data?.detail || "Invalid username or password";
+      msg.className = "error";
+      token = "";
+      return;
+    }
+
+    if (!data.access_token) {
+      msg.innerText = "Login failed";
+      msg.className = "error";
+      token = "";
+      return;
+    }
+
+    token = data.access_token;
+    msg.innerText = "Login successful";
+    msg.className = "success";
+  }
+
+  // ---------- LOGOUT ----------
+  function logout() {
+    token = "";
+
+    document.getElementById("prompt").value = "";
+    document.getElementById("output").innerText = "";
+    document.getElementById("login-msg").innerText = "";
+    document.getElementById("signup-msg").innerText = "";
+
+    const logoutMsg = document.getElementById("logout-msg");
+    logoutMsg.innerText = "Logged out successfully";
+    logoutMsg.className = "success";
+  }
+
+  // ---------- GENERATE ----------
+  async function generate() {
+    if (!token) {
+      alert("Please login first");
+      return;
+    }
+
+    const promptText = document.getElementById("prompt").value.trim();
+
+    if (!promptText) {
+      alert("Prompt cannot be empty");
+      return;
+    }
+
+    const res = await fetch("/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ prompt: promptText })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      document.getElementById("output").innerText =
+        data?.detail || "Unauthorized or error occurred";
+      return;
+    }
+
+    document.getElementById("output").innerText = data.answer;
+  }
+</script>
+
+</body>
+</html>
