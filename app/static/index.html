@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>GenAI Chatbot</title>
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -31,25 +32,26 @@
     }
   </style>
 </head>
+
 <body>
 
 <h2>🧑‍💻 Signup</h2>
-<input id="su-username" placeholder="Username">
-<input id="su-password" type="password" placeholder="Password">
+<input id="su-username" placeholder="Username" />
+<input id="su-password" type="password" placeholder="Password" />
 <button onclick="signup()">Signup</button>
 <div id="signup-msg"></div>
 
-<hr>
+<hr />
 
 <h2>🔐 Login</h2>
-<input id="li-username" placeholder="Username">
-<input id="li-password" type="password" placeholder="Password">
+<input id="li-username" placeholder="Username" />
+<input id="li-password" type="password" placeholder="Password" />
 <button onclick="login()">Login</button>
 <button onclick="logout()">Logout</button>
 <div id="login-msg"></div>
 <div id="logout-msg"></div>
 
-<hr>
+<hr />
 
 <h2>💬 Ask the AI</h2>
 <textarea id="prompt" rows="4" placeholder="Enter your prompt..."></textarea>
@@ -75,22 +77,30 @@
       return;
     }
 
-    const res = await fetch("/auth/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
+    try {
+      const res = await fetch("/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) {
-      msg.innerText = data?.detail || "Signup failed";
+      if (!res.ok) {
+        msg.innerText =
+          typeof data?.detail === "string"
+            ? data.detail
+            : "Signup failed";
+        msg.className = "error";
+        return;
+      }
+
+      msg.innerText = "Signup successful. You can now login.";
+      msg.className = "success";
+    } catch {
+      msg.innerText = "Network error. Try again.";
       msg.className = "error";
-      return;
     }
-
-    msg.innerText = "Signup successful. You can now login.";
-    msg.className = "success";
   }
 
   // ---------- LOGIN ----------
@@ -111,31 +121,37 @@
       return;
     }
 
-    const res = await fetch("/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
+    try {
+      const res = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) {
-      msg.innerText = data?.detail || "Invalid username or password";
+      if (!res.ok) {
+        let errorMsg = "Invalid username or password";
+
+        if (typeof data?.detail === "string") {
+          errorMsg = data.detail;
+        } else if (Array.isArray(data?.detail)) {
+          errorMsg = data.detail[0]?.msg || errorMsg;
+        }
+
+        msg.innerText = errorMsg;
+        msg.className = "error";
+        token = "";
+        return;
+      }
+
+      token = data.access_token;
+      msg.innerText = "Login successful";
+      msg.className = "success";
+    } catch {
+      msg.innerText = "Network error. Try again.";
       msg.className = "error";
-      token = "";
-      return;
     }
-
-    if (!data.access_token) {
-      msg.innerText = "Login failed";
-      msg.className = "error";
-      token = "";
-      return;
-    }
-
-    token = data.access_token;
-    msg.innerText = "Login successful";
-    msg.className = "success";
   }
 
   // ---------- LOGOUT ----------
@@ -166,24 +182,30 @@
       return;
     }
 
-    const res = await fetch("/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify({ prompt: promptText })
-    });
+    try {
+      const res = await fetch("/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ prompt: promptText })
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) {
-      document.getElementById("output").innerText =
-        data?.detail || "Unauthorized or error occurred";
-      return;
+      if (!res.ok) {
+        document.getElementById("output").innerText =
+          typeof data?.detail === "string"
+            ? data.detail
+            : "Unauthorized or error occurred";
+        return;
+      }
+
+      document.getElementById("output").innerText = data.answer;
+    } catch {
+      document.getElementById("output").innerText = "Network error.";
     }
-
-    document.getElementById("output").innerText = data.answer;
   }
 </script>
 
