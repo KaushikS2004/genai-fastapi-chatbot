@@ -14,4 +14,7 @@ class PromptRequest(BaseModel):
 class GenerateRequest(BaseModel):
     prompt: str
     session_id: Optional[str] = None
+    mode: Optional[str] = "default"     
+    format: Optional[str] = "auto"      
+    tone: Optional[str] = "neutral"      
 
