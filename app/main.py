@@ -25,7 +25,6 @@ from app.rag_store import get_store
 from app.embeddings import embed_query
 
 
-
 app = FastAPI(
     title="Authenticated GenAI App",
     description="FastAPI + JWT + LLM",
@@ -100,6 +99,10 @@ def generate_stream(
 
     # 🔍 RAG retrieval
     store = get_store(current_user, session_id)
+    print("VectorStore size:", len(store.texts))
+    print("User question:", payload.prompt)
+
+
     retrieved_chunks = []
 
     if store.index.ntotal > 0:
@@ -108,7 +111,8 @@ def generate_stream(
             retrieved_chunks = store.search(query_embedding, k=4)
             print(f"Retrieved chunks: {len(retrieved_chunks)}")
         except Exception as e:
-            print("RAG error:", e)
+            print("RAG retrieval error:", e)
+    print("Retrieved chunks:", retrieved_chunks)
 
     if retrieved_chunks:
         system_prompt += "\n\nUse the following context to answer:\n"
@@ -125,12 +129,17 @@ def generate_stream(
         full_answer = ""
         for token in stream_answer(messages):
             full_answer += token
-            yield token
+            yield f"{token}"
+
 
         save_message(current_user, session_id, "user", payload.prompt)
         save_message(current_user, session_id, "assistant", full_answer)
 
-    return StreamingResponse(event_stream(), media_type="text/plain")
+    return StreamingResponse(
+    event_stream(),
+    media_type="text/event-stream"
+)
+
 
 @app.post("/upload")
 async def upload_file(
@@ -155,6 +164,8 @@ async def upload_file(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    print("Chunks stored:", len(chunks))
+
 
 
 if os.path.isdir("app/static"):
