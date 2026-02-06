@@ -2,20 +2,31 @@ from typing import Dict, List, Tuple
 
 # Key = (user_id, session_id)
 # Value = list of messages
-chat_sessions: Dict[Tuple[str, str], List[dict]] = {}
+from sqlalchemy.orm import Session
+from app.db.conversation import Message
 
 
-def get_history(user_id: str, session_id: str) -> List[dict]:
-    return chat_sessions.get((user_id, session_id), [])
+def get_history(db: Session, conversation_id: str):
+    return (
+        db.query(Message)
+        .filter(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at)
+        .all()
+    )
 
 
-def save_message(user_id: str, session_id: str, role: str, content: str):
-    key = (user_id, session_id)
-    chat_sessions.setdefault(key, []).append({
-        "role": role,
-        "content": content
-    })
+def save_message(db: Session, conversation_id: str, role: str, content: str):
+    msg = Message(
+        conversation_id=conversation_id,
+        role=role,
+        content=content
+    )
+    db.add(msg)
+    db.commit()
 
 
-def clear_history(user_id: str, session_id: str):
-    chat_sessions.pop((user_id, session_id), None)
+def clear_history(db: Session, conversation_id: str):
+    db.query(Message)\
+      .filter(Message.conversation_id == conversation_id)\
+      .delete()
+    db.commit()

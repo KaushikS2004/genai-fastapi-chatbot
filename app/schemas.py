@@ -1,5 +1,8 @@
+
+from datetime import datetime
+from typing import List, Optional
 from pydantic import BaseModel,Field
-from typing import Optional
+
 class UserCreate(BaseModel):
     username: str
     password: str = Field(..., min_length=6, max_length=72)
@@ -13,8 +16,36 @@ class PromptRequest(BaseModel):
 
 class GenerateRequest(BaseModel):
     prompt: str
-    session_id: Optional[str] = None
-    mode: Optional[str] = "default"     
-    format: Optional[str] = "auto"      
-    tone: Optional[str] = "neutral"      
+    conversation_id: str   # REQUIRED
+    mode: Optional[str] = "default"
+    format: Optional[str] = "auto"
+    tone: Optional[str] = "neutral"
+
+class ConversationCreate(BaseModel):
+    title: Optional[str] = None
+
+class ConversationUpdate(BaseModel):
+    title: str
+
+class ConversationOut(BaseModel):
+    id: str
+    title: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+class MessageOut(BaseModel):
+    id: str
+    role: str
+    content: str
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class MessagesResponse(BaseModel):
+    messages: List[MessageOut]
+
 

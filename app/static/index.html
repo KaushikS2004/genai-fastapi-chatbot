@@ -3,335 +3,648 @@
 <head>
   <meta charset="UTF-8" />
   <title>GenAI Chatbot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Markdown Renderer -->
+  <!-- Markdown + Sanitize (correct script tags) -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
 
   <style>
+    :root{
+      --bg:#fafafa; --panel:#ffffff; --muted:#f1f0f0; --accent:#dcf8c6;
+      --border:#ddd; --text:#111; --hint:#666; --brand:#2563eb; --danger:#dc2626;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
-      font-family: Arial, sans-serif;
-      max-width: 800px;
-      margin: 40px auto;
-      background: #fafafa;
+      margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text);
+      display: grid; grid-template-columns: 280px 1fr; grid-template-rows: auto 1fr;
+      grid-template-areas: "sidebar header" "sidebar main"; min-height: 100vh;
     }
 
-    h2 { margin-top: 30px; }
+    /* Sidebar */
+    .sidebar { grid-area: sidebar; border-right: 1px solid var(--border); background: #fff; display: flex; flex-direction: column; height: 100vh; position: sticky; top: 0; }
+    .sb-top { padding: 12px; border-bottom: 1px solid var(--border); }
+    .sb-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .sb-actions .new-btn { background: var(--brand); color: white; border: none; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+    .sb-actions .new-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .sb-search input { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+    .sb-list { padding: 8px; overflow-y: auto; flex: 1; }
+    .chat-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .chat-item:hover { background: #f7f7f7; }
+    .chat-item.active { background: #e8f0ff; border: 1px solid #c9ddff; }
+    .chat-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chat-sub { font-size: 12px; color: var(--hint); }
+    .chat-actions { display: flex; gap: 6px; }
+    .chat-actions button { border: 1px solid var(--border); background: white; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .chat-actions button:hover { background: #f4f4f4; }
 
-    input, textarea, button, select {
-      width: 100%;
-      padding: 10px;
-      margin: 6px 0;
+    /* Header */
+    .header { grid-area: header; display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); background: #fff; position: sticky; top: 0; z-index: 2; }
+    .brand { font-weight: bold; }
+    .auth-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .auth-controls input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
+    .auth-controls button { padding: 6px 10px; border: 1px solid var(--border); background: white; border-radius: 6px; cursor: pointer; }
+    .auth-controls button.primary { background: var(--brand); color: white; border: none; }
+    .flash { font-size: 12px; margin-left: 8px; }
+    .success { color: green; } .error { color: var(--danger); }
+
+    /* Main */
+    .main { grid-area: main; display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; padding: 16px; }
+    .uploader, .controls-row, .composer { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+    .controls-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+    select, input[type="file"], button, textarea {
+      width: 100%; padding: 10px; margin: 6px 0; border: 1px solid var(--border); border-radius: 6px; background: white;
     }
+    button { cursor: pointer; } button.danger { background: #ffecec; color: var(--danger); border-color: #ffc9c9; }
 
-    button { cursor: pointer; }
+    .output { padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: #fff; overflow-y: auto; max-height: calc(100vh - 320px); }
+    .msg { margin-bottom: 12px; padding: 10px; border-radius: 6px; line-height: 1.5; white-space: pre-wrap; }
+    .user { background: var(--accent); text-align: right; }
+    .assistant { background: var(--muted); text-align: left; }
 
-    .controls {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-    }
+    .composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+    .composer .actions { display: flex; gap: 8px; }
+    .hint { color: var(--hint); font-size: 12px; }
 
-    #output {
-      margin-top: 20px;
-      padding: 15px;
-      border: 1px solid #ccc;
-      max-height: 450px;
-      overflow-y: auto;
-      background: #fff;
-    }
-
-    .msg {
-      margin-bottom: 12px;
-      padding: 10px;
-      border-radius: 6px;
-      line-height: 1.5;
-    }
-
-    .user {
-      background: #dcf8c6;
-      text-align: right;
-    }
-
-    .assistant {
-      background: #f1f0f0;
-      text-align: left;
-    }
-
-    .success { color: green; }
-    .error { color: red; }
-
-    /* Markdown styling */
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-top: 10px;
-    }
-
-    th, td {
-      border: 1px solid #ccc;
-      padding: 6px;
-      text-align: left;
-    }
-
+    /* Markdown tables / code */
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
     th { background: #f5f5f5; }
+    pre { background: #eee; padding: 10px; border-radius: 6px; overflow-x: auto; }
+    code { background: #eee; padding: 2px 4px; border-radius: 4px; }
 
-    pre {
-      background: #eee;
-      padding: 10px;
-      border-radius: 6px;
-      overflow-x: auto;
+    @media (max-width: 980px) {
+      body { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr;
+             grid-template-areas: "header" "sidebar" "main"; }
+      .sidebar { height: auto; position: relative; }
     }
 
-    code {
-      background: #eee;
-      padding: 2px 4px;
-      border-radius: 4px;
-    }
+    .loading { opacity: 0.7; }
   </style>
 </head>
 
 <body>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sb-top">
+      <div class="sb-actions">
+        <button class="new-btn" id="btn-new-chat">+ New Chat</button>
+        <span class="hint" id="active-user"></span>
+      </div>
+      <div class="sb-search">
+        <input id="chat-search" placeholder="Search chats..." />
+      </div>
+    </div>
+    <div class="sb-list" id="chat-list"></div>
+  </aside>
 
-<h2>🧑‍💻 Signup</h2>
-<input id="su-username" placeholder="Username" />
-<input id="su-password" type="password" placeholder="Password" />
-<button onclick="signup()">Signup</button>
-<div id="signup-msg"></div>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">🤖 GenAI Chatbot</div>
+    <div class="auth-controls">
+      <input id="su-username" placeholder="Signup username" />
+      <input id="su-password" type="password" placeholder="Signup password" />
+      <button id="btn-signup" class="primary">Signup</button>
 
-<hr />
+      <input id="li-username" placeholder="Login username" />
+      <input id="li-password" type="password" placeholder="Login password" />
+      <button id="btn-login" class="primary">Login</button>
+      <button id="btn-logout">Logout</button>
 
-<h2>🔐 Login</h2>
-<input id="li-username" placeholder="Username" />
-<input id="li-password" type="password" placeholder="Password" />
-<button onclick="login()">Login</button>
-<button onclick="logout()">Logout</button>
-<div id="login-msg"></div>
-<div id="logout-msg"></div>
+      <span id="auth-msg" class="flash"></span>
+    </div>
+  </header>
 
-<hr />
+  <!-- Main -->
+  <main class="main">
+    <section class="uploader">
+      <h3>📎 Upload Document</h3>
+      <input type="file" id="fileInput" />
+      <button id="btn-upload">Upload File</button>
+      <div id="file-msg" class="flash"></div>
+      <div class="hint">Files attach to the open conversation.</div>
+    </section>
 
-<h2>📎 Upload Document</h2>
-<input type="file" id="fileInput" />
-<button onclick="uploadFile()">Upload File</button>
-<div id="file-msg"></div>
+    <section class="controls-row">
+      <select id="mode">
+        <option value="default">Default</option>
+        <option value="coding">Coding</option>
+        <option value="interview">Interview</option>
+        <option value="explainer">Explainer</option>
+      </select>
+      <select id="format">
+        <option value="auto">Auto</option>
+        <option value="bullets">Bullets</option>
+        <option value="table">Table</option>
+        <option value="json">JSON</option>
+      </select>
+      <select id="tone">
+        <option value="neutral">Neutral</option>
+        <option value="simple">Simple</option>
+        <option value="detailed">Detailed</option>
+      </select>
+    </section>
 
-<hr />
+    <section class="output" id="output"></section>
 
-<h2>💬 Ask the AI</h2>
+    <section class="composer">
+      <textarea id="prompt" rows="3" placeholder="Type a message (Shift+Enter = newline)..."></textarea>
+      <div class="actions">
+        <button id="btn-generate" class="primary">Send</button>
+        <button id="btn-stop" class="danger" disabled>Stop</button>
+      </div>
+      <div class="hint">Enter to send • Shift+Enter for newline</div>
+    </section>
+  </main>
 
-<div class="controls">
-  <select id="mode">
-    <option value="default">Default</option>
-    <option value="coding">Coding</option>
-    <option value="interview">Interview</option>
-    <option value="explainer">Explainer</option>
-  </select>
+  <script>
+    // ===== GLOBALS =====
+    let token = localStorage.getItem("token") || "";
+    let username = localStorage.getItem("username") || "";
+    let currentConversationId = localStorage.getItem("current_conversation_id") || "";
+    let controller = null;
 
-  <select id="format">
-    <option value="auto">Auto</option>
-    <option value="bullets">Bullets</option>
-    <option value="table">Table</option>
-    <option value="json">JSON</option>
-  </select>
+    // NEW: cache + fetch sequencing to avoid race conditions
+    let convosCache = [];   // [{id, title, created_at, updated_at}]
+    let fetchSeq = 0;       // increment per request; only latest response applies
 
-  <select id="tone">
-    <option value="neutral">Neutral</option>
-    <option value="simple">Simple</option>
-    <option value="detailed">Detailed</option>
-  </select>
-</div>
+    // Markdown renderer
+    marked.setOptions({ breaks: true, gfm: true });
+    const md = (t) => DOMPurify.sanitize(marked.parse(t || ""));
+    const esc = (t) => DOMPurify.sanitize(t || "");
 
-<textarea id="prompt" rows="4" placeholder="Enter your prompt..."></textarea>
-<button onclick="generate()">Generate</button>
+    // ===== DOM =====
+    const suUsername = document.getElementById("su-username");
+    const suPassword = document.getElementById("su-password");
+    const liUsername = document.getElementById("li-username");
+    const liPassword = document.getElementById("li-password");
+    const authMsg   = document.getElementById("auth-msg");
+    const activeUser = document.getElementById("active-user");
 
-<div id="output"></div>
+    const mode = document.getElementById("mode");
+    const format = document.getElementById("format");
+    const tone = document.getElementById("tone");
 
-<script>
-  // ================= GLOBAL STATE =================
-  let token = "";
-
-  let sessionId = localStorage.getItem("session_id");
-  if (!sessionId) {
-    sessionId = crypto.randomUUID();
-    localStorage.setItem("session_id", sessionId);
-  }
-
-  // ================= UI =================
-  function appendMessage(role, text) {
-    const output = document.getElementById("output");
-    const div = document.createElement("div");
-    div.className = `msg ${role}`;
-
-    const rendered = role === "assistant"
-      ? marked.parse(text)
-      : text;
-
-    div.innerHTML = `<strong>${role === "user" ? "You" : "AI"}:</strong><br>${rendered}`;
-    output.appendChild(div);
-    output.scrollTop = output.scrollHeight;
-  }
-
-  // ================= AUTH =================
-  async function signup() {
-    try {
-      const res = await fetch("/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: suUsername.value.trim(),
-          password: suPassword.value.trim()
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Signup failed");
-
-      signupMsg.innerText = "Signup successful. Please login.";
-      signupMsg.className = "success";
-    } catch (e) {
-      signupMsg.innerText = e.message;
-      signupMsg.className = "error";
-    }
-  }
-
-  async function login() {
-    try {
-      const res = await fetch("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: liUsername.value.trim(),
-          password: liPassword.value.trim()
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error("Invalid username or password");
-
-      token = data.access_token;
-      loginMsg.innerText = "Login successful";
-      loginMsg.className = "success";
-    } catch (e) {
-      loginMsg.innerText = e.message;
-      loginMsg.className = "error";
-    }
-  }
-
-  function logout() {
-    token = "";
-    localStorage.removeItem("session_id");
-    sessionId = crypto.randomUUID();
-    localStorage.setItem("session_id", sessionId);
-    output.innerHTML = "";
-    logoutMsg.innerText = "Logged out successfully";
-    logoutMsg.className = "success";
-  }
-
-  // ================= FILE UPLOAD =================
-  async function uploadFile() {
-    if (!token) {
-      alert("Please login first");
-      return;
-    }
-
-    const file = fileInput.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch(`/upload?session_id=${sessionId}`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Upload failed");
-
-      fileMsg.innerText = `✅ Uploaded: ${data.filename}`;
-      fileMsg.className = "success";
-    } catch (e) {
-      fileMsg.innerText = "❌ Upload failed";
-      fileMsg.className = "error";
-    }
-  }
-
-  // ================= STREAMING GENERATE =================
-  async function generate() {
-    if (!token) {
-      alert("Please login first");
-      return;
-    }
-
-    const text = prompt.value.trim();
-    if (!text) return;
-
-    appendMessage("user", text);
-    prompt.value = "";
+    const fileInput = document.getElementById("fileInput");
+    const fileMsg = document.getElementById("file-msg");
 
     const output = document.getElementById("output");
-    const div = document.createElement("div");
-    div.className = "msg assistant";
-    div.innerHTML = "<strong>AI:</strong><br>";
-    output.appendChild(div);
+    const chatList = document.getElementById("chat-list");
+    const chatSearch = document.getElementById("chat-search");
 
-    try {
-      const res = await fetch("/generate/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          prompt: text,
-          session_id: sessionId,
-          mode: mode.value,
-          format: format.value,
-          tone: tone.value
-        })
-      });
+    const promptEl = document.getElementById("prompt");
+    const btnSignup = document.getElementById("btn-signup");
+    const btnLogin = document.getElementById("btn-login");
+    const btnLogout = document.getElementById("btn-logout");
+    const btnUpload = document.getElementById("btn-upload");
+    const btnGenerate = document.getElementById("btn-generate");
+    const btnStop = document.getElementById("btn-stop");
+    const btnNewChat = document.getElementById("btn-new-chat");
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
+    // ===== UI helpers =====
+    function setFlash(el, text, type="") {
+      el.textContent = text || "";
+      el.className = `flash ${type}`;
+      if (text) setTimeout(() => { el.textContent=""; el.className="flash"; }, 3000);
+    }
+    function setAuthFlash(t, type="") { setFlash(authMsg, t, type); }
+    function setFileFlash(t, type="") { setFlash(fileMsg, t, type); }
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+    function setActiveUser() {
+      activeUser.textContent = token ? `👤 ${username || "Logged in"}` : "Not logged in";
+      btnNewChat.disabled = !token;
+      btnUpload.disabled = !token || !currentConversationId;
+      btnGenerate.disabled = !token;
+    }
+    function clearOutput() { output.innerHTML = ""; }
+    function appendMessage(role, text) {
+      const div = document.createElement("div");
+      div.className = `msg ${role}`;
+      const rendered = role === "assistant" ? md(text) : esc(text);
+      div.innerHTML = `<strong>${role === "user" ? "You" : "AI"}:</strong><br>${rendered}`;
+      output.appendChild(div);
+      output.scrollTop = output.scrollHeight;
+      return div;
+    }
+    function renderMessages(msgs = []) {
+      clearOutput();
+      msgs.forEach(m => appendMessage(m.role, m.content));
+    }
 
-        fullText += decoder.decode(value);
-        div.innerHTML = "<strong>AI:</strong><br>" + marked.parse(fullText);
-        output.scrollTop = output.scrollHeight;
+    // ===== Conversations (server) =====
+    async function fetchConversations(query = "") {
+      if (!token) return [];
+      const mySeq = ++fetchSeq; // bump sequence to identify latest request
+      const url = `/conversations${query ? `?query=${encodeURIComponent(query)}` : ""}`;
+
+      try {
+        const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` }});
+        if (res.status === 401) { handleUnauthorized(); return []; }
+        if (!res.ok) throw new Error(`Failed to fetch conversations (${res.status})`);
+        const data = await res.json();
+
+        // Only apply if this is the latest response
+        if (mySeq === fetchSeq) {
+          if (!query) {
+            convosCache = Array.isArray(data) ? data : [];
+          }
+          return data;
+        }
+        // Out-of-order response; ignore
+        return [];
+      } catch (e) {
+        console.error("fetchConversations error:", e);
+        return [];
       }
-    } catch {
-      div.innerHTML += "⚠️ Error generating response";
     }
-  }
 
-  // ================= DOM =================
-  const suUsername = document.getElementById("su-username");
-  const suPassword = document.getElementById("su-password");
-  const signupMsg = document.getElementById("signup-msg");
+    async function reloadSidebar() {
+      await fetchConversations(""); // refresh cache
+      renderChatList();             // render from cache with current search
+    }
 
-  const liUsername = document.getElementById("li-username");
-  const liPassword = document.getElementById("li-password");
-  const loginMsg = document.getElementById("login-msg");
-  const logoutMsg = document.getElementById("logout-msg");
+    function renderChatList() {
+      const q = (chatSearch.value || "").trim().toLowerCase();
+      let list = convosCache;
 
-  const prompt = document.getElementById("prompt");
-  const output = document.getElementById("output");
+      if (q) {
+        list = list.filter(c => (c.title || "").toLowerCase().includes(q));
+      }
 
-  const mode = document.getElementById("mode");
-  const format = document.getElementById("format");
-  const tone = document.getElementById("tone");
+      chatList.innerHTML = "";
 
-  const fileInput = document.getElementById("fileInput");
-  const fileMsg = document.getElementById("file-msg");
-</script>
+      if (!token) {
+        chatList.innerHTML = `<div class="hint" style="padding: 12px;">Login to view conversations.</div>`;
+        return;
+      }
 
+      if (!convosCache.length) {
+        chatList.innerHTML = `<div class="hint" style="padding: 12px;">No chats. Start a new one!</div>`;
+        return;
+      }
+
+      if (q && list.length === 0) {
+        chatList.innerHTML = `<div class="hint" style="padding: 12px;">No matches for "${escapeHtml(q)}".</div>`;
+        return;
+      }
+
+      list.forEach(c => {
+        const item = document.createElement("div");
+        item.className = `chat-item ${c.id === currentConversationId ? "active" : ""}`;
+        item.dataset.id = c.id;
+
+        const left = document.createElement("div");
+        const title = document.createElement("div");
+        title.className = "chat-title";
+        title.textContent = c.title || "Untitled";
+        const sub = document.createElement("div");
+        sub.className = "chat-sub";
+        sub.textContent = c.updated_at ? new Date(c.updated_at).toLocaleString() : "";
+        left.appendChild(title);
+        left.appendChild(sub);
+
+        const actions = document.createElement("div");
+        actions.className = "chat-actions";
+        const renameBtn = document.createElement("button");
+        renameBtn.textContent = "✏️"; renameBtn.title = "Rename";
+        renameBtn.onclick = async (e) => {
+          e.stopPropagation();
+          const newTitle = prompt("Rename chat:", c.title || "Untitled");
+          if (newTitle && newTitle.trim()) {
+            try {
+              await renameConversation(c.id, newTitle.trim());
+              // Update cache immediately
+              convosCache = convosCache.map(x => x.id === c.id ? { ...x, title: newTitle.trim(), updated_at: new Date().toISOString() } : x);
+              renderChatList();
+            } catch (err) { alert(err.message); }
+          }
+        };
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "🗑️"; delBtn.title = "Delete";
+        delBtn.onclick = async (e) => {
+          e.stopPropagation();
+          if (confirm("Delete this chat?")) {
+            try {
+              await deleteConversation(c.id);
+              // Remove from cache immediately
+              convosCache = convosCache.filter(x => x.id !== c.id);
+              if (currentConversationId === c.id) {
+                currentConversationId = "";
+                localStorage.removeItem("current_conversation_id");
+                clearOutput();
+              }
+              renderChatList();
+            } catch (err) { alert(err.message); }
+          }
+        };
+        actions.appendChild(renameBtn);
+        actions.appendChild(delBtn);
+
+        item.appendChild(left);
+        item.appendChild(actions);
+        item.onclick = () => openConversation(c.id);
+        chatList.appendChild(item);
+      });
+    }
+
+    // Search filters locally (no fetch)
+    chatSearch.addEventListener("input", () => {
+      renderChatList();
+    });
+
+    // Utility to safely echo input
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+
+    async function openConversation(id) {
+      if (!token) return;
+      currentConversationId = id;
+      localStorage.setItem("current_conversation_id", id);
+      renderChatList();
+      setActiveUser();
+
+      const res = await fetch(`/conversations/${id}/messages`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      if (!res.ok) { clearOutput(); return; }
+      const data = await res.json();
+      renderMessages(data.messages || []);
+    }
+
+    async function createConversation(initialTitle="New chat") {
+      const res = await fetch(`/conversations`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ title: initialTitle })
+      });
+      if (res.status === 401) { handleUnauthorized(); return null; }
+      if (!res.ok) throw new Error("Failed to create conversation");
+      const convo = await res.json();
+      currentConversationId = convo.id;
+      localStorage.setItem("current_conversation_id", convo.id);
+
+      // Update cache immediately to avoid empty state flicker
+      const nowIso = new Date().toISOString();
+      convosCache = [{ id: convo.id, title: convo.title || "New chat", updated_at: convo.updated_at || nowIso, created_at: convo.created_at || nowIso }, ...convosCache];
+      renderChatList();
+
+      // Load messages area
+      renderMessages([]);
+      setActiveUser();
+      return convo.id;
+    }
+
+    async function renameConversation(id, title) {
+      const res = await fetch(`/conversations/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ title })
+      });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      if (!res.ok) throw new Error("Failed to rename conversation");
+      // Server updated timestamp; refresh cache eventually (we also optimistic-update above)
+      // Optional: await reloadSidebar();
+    }
+
+    async function deleteConversation(id) {
+      const res = await fetch(`/conversations/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      if (!res.ok) throw new Error("Failed to delete conversation");
+      // Cache removal handled in UI action to avoid flicker
+    }
+
+    // ===== Auth =====
+    async function signup() {
+      try {
+        const res = await fetch("/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: suUsername.value.trim(), password: suPassword.value.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Signup failed");
+        setAuthFlash("Signup successful. Please login.", "success");
+      } catch (e) {
+        setAuthFlash(e.message, "error");
+      }
+    }
+
+    async function login() {
+      try {
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: liUsername.value.trim(), password: liPassword.value.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error("Invalid username or password");
+        token = data.access_token;
+        username = liUsername.value.trim();
+        localStorage.setItem("token", token);
+        localStorage.setItem("username", username);
+        setAuthFlash("Login successful", "success");
+        setActiveUser();
+
+        await reloadSidebar();
+        const convos = convosCache;
+        if (currentConversationId && convos.some(c => c.id === currentConversationId)) {
+          await openConversation(currentConversationId);
+        } else if (convos.length) {
+          await openConversation(convos[0].id);
+        } else {
+          await createConversation();
+        }
+      } catch (e) {
+        setAuthFlash(e.message, "error");
+      }
+    }
+
+    function logout() {
+      token = "";
+      username = "";
+      localStorage.removeItem("token");
+      localStorage.removeItem("username");
+      setAuthFlash("Logged out successfully", "success");
+      setActiveUser();
+      chatList.innerHTML = `<div class="hint" style="padding: 12px;">Login to view conversations.</div>`;
+      clearOutput();
+    }
+
+    function handleUnauthorized() {
+      // Token expired/invalid—log out locally
+      logout();
+      setAuthFlash("Session expired. Please login again.", "error");
+    }
+
+    // ===== Upload =====
+    async function uploadFile() {
+      if (!token) { alert("Please login first"); return; }
+      if (!currentConversationId) { alert("Open or create a conversation first"); return; }
+      const file = fileInput.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch(`/upload?conversation_id=${encodeURIComponent(currentConversationId)}`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}` },
+          body: formData
+        });
+        if (res.status === 401) { handleUnauthorized(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Upload failed");
+        setFileFlash(`✅ Uploaded: ${data.filename}`, "success");
+
+        // Update timestamp locally
+        convosCache = convosCache.map(x => x.id === currentConversationId ? { ...x, updated_at: new Date().toISOString() } : x);
+        renderChatList();
+      } catch (e) {
+        console.error("Upload error:", e);
+        setFileFlash(e.message || "❌ Upload failed", "error");
+      }
+    }
+
+    // ===== Streaming generate =====
+    async function generate() {
+      if (!token) { alert("Please login first"); return; }
+      let text = promptEl.value;
+      if (!text || !text.trim()) return;
+      text = text.trim();
+
+      if (!currentConversationId) {
+        const newId = await createConversation();
+        if (!newId) { alert("Failed to create conversation"); return; }
+      }
+
+      appendMessage("user", text);
+      promptEl.value = "";
+
+      const div = appendMessage("assistant", "");
+      btnGenerate.disabled = true;
+      btnStop.disabled = false;
+
+      // Auto-title on first message
+      try {
+        const me = convosCache.find(c => c.id === currentConversationId);
+        const currentTitle = (me?.title || "").trim().toLowerCase();
+        if (!currentTitle || currentTitle === "new chat") {
+          const candidate = text.split("\n")[0].slice(0, 60).trim();
+          if (candidate) {
+            await renameConversation(currentConversationId, candidate);
+            convosCache = convosCache.map(x => x.id === currentConversationId ? { ...x, title: candidate, updated_at: new Date().toISOString() } : x);
+            renderChatList();
+          }
+        }
+      } catch {}
+
+      try {
+        controller = new AbortController();
+        const res = await fetch("/generate/stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            prompt: text,
+            conversation_id: currentConversationId,
+            mode: mode.value, format: format.value, tone: tone.value
+          }),
+          signal: controller.signal
+        });
+
+        if (res.status === 401) { handleUnauthorized(); return; }
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          console.error("Stream start failed:", res.status, errText);
+          throw new Error(`Generate failed: ${res.status}`);
+        }
+        if (!res.body) throw new Error("No response body (ReadableStream was null)");
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        // Backend yields raw text chunks under text/event-stream
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          fullText += decoder.decode(value, { stream: true });
+          div.innerHTML = `<strong>AI:</strong><br>${md(fullText)}`;
+          output.scrollTop = output.scrollHeight;
+        }
+
+        // Refresh timestamp locally
+        convosCache = convosCache.map(x => x.id === currentConversationId ? { ...x, updated_at: new Date().toISOString() } : x);
+        renderChatList();
+      } catch (e) {
+        if (e.name !== "AbortError") {
+          console.error("Generate error:", e);
+          div.innerHTML += "<br>⚠️ Error generating response";
+        }
+      } finally {
+        btnGenerate.disabled = false;
+        btnStop.disabled = true;
+        controller = null;
+      }
+    }
+
+    function stopStreaming() {
+      if (controller) controller.abort();
+      btnGenerate.disabled = false;
+      btnStop.disabled = true;
+    }
+
+    // ===== Events =====
+    btnSignup.addEventListener("click", signup);
+    btnLogin.addEventListener("click", login);
+    btnLogout.addEventListener("click", logout);
+    btnUpload.addEventListener("click", uploadFile);
+    btnGenerate.addEventListener("click", generate);
+    btnStop.addEventListener("click", stopStreaming);
+    btnNewChat.addEventListener("click", async () => { await createConversation(); renderChatList(); });
+    promptEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); generate(); }
+    });
+
+    // ===== Init =====
+    (async function init(){
+      setActiveUser();
+
+      // Quick runtime sanity for libs
+      if (typeof marked === "undefined" || typeof DOMPurify === "undefined") {
+        console.error("❌ Required libraries not loaded (marked/DOMPurify). Check <script src=...> tags.");
+      }
+
+      if (token) {
+        await reloadSidebar();
+        const convos = convosCache;
+        if (currentConversationId && convos.some(c => c.id === currentConversationId)) {
+          await openConversation(currentConversationId);
+        } else if (convos.length) {
+          await openConversation(convos[0].id);
+        } else {
+          await createConversation();
+          await reloadSidebar();
+        }
+      } else {
+        chatList.innerHTML = `<div class="hint" style="padding: 12px;">Login to view conversations.</div>`;
+      }
+    })();
+  </script>
 </body>
 </html>
